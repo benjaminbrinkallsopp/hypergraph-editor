@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hypergraph Network Editor</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0f0f1a;
+    color: #e0e0e0;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #sidebar {
+    width: 260px;
+    min-width: 260px;
+    background: #16162a;
+    border-right: 1px solid #2a2a4a;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    gap: 16px;
+    overflow-y: auto;
+  }
+
+  h1 { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #888; line-height: 1.4; }
+
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #666;
+    margin-bottom: 8px;
+  }
+
+  .btn {
+    padding: 8px 16px;
+    border: 1px solid #3a3a5a;
+    background: #1e1e3a;
+    color: #e0e0e0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: #2a2a4a; border-color: #4a4a6a; }
+  .btn.danger { border-color: #5a2a2a; }
+  .btn.danger:hover { background: #3a1a1a; border-color: #8a3a3a; }
+
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; }
+
+  #info-panel {
+    background: #1a1a30;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 80px;
+  }
+
+  .info-label { color: #888; font-size: 11px; }
+  .info-value { color: #fff; }
+  .info-type-node { color: #6ec6ff; }
+  .info-type-arc { color: #ff6b9d; }
+
+  .legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch { width: 16px; height: 3px; border-radius: 2px; }
+
+  .instructions { font-size: 12px; color: #888; line-height: 1.6; }
+  .instructions kbd {
+    background: #2a2a4a;
+    border: 1px solid #3a3a5a;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #ccc;
+  }
+
+  #canvas-container { flex: 1; position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #prompt-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: #16162aee;
+    backdrop-filter: blur(8px);
+    border-top: 1px solid #2a2a4a;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  #prompt-text {
+    flex: 1;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    color: #aaa;
+    line-height: 1.5;
+    max-height: 80px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+
+  #copy-btn {
+    padding: 6px 14px;
+    background: #2a2a4a;
+    border: 1px solid #3a3a5a;
+    border-radius: 5px;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  #copy-btn:hover { background: #3a3a5a; }
+  #copy-btn.copied { background: #1a4a2a; border-color: #2a6a3a; color: #6fce8a; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div>
+    <h1>Hypergraph Editor</h1>
+    <div class="subtitle">Nodes and arcs — where arcs can connect to other arcs</div>
+  </div>
+
+  <div>
+    <div class="section-title">Actions</div>
+    <div class="btn-row">
+      <button class="btn" id="add-node-btn">+ Node</button>
+      <button class="btn danger" id="clear-btn">Clear All</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-title">Selected</div>
+    <div id="info-panel">
+      <span class="info-label">Nothing selected</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-title">Legend</div>
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#00d4ff;"></div>
+        <span>Node &rarr; Node arc</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#ff6b9d;"></div>
+        <span>Arc involving another arc</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#6ec6ff;width:10px;height:10px;border-radius:50%;"></div>
+        <span>Node</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#ffa94d;width:8px;height:8px;border-radius:50%;"></div>
+        <span>Arc midpoint (connectable)</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-title">Controls</div>
+    <div class="instructions">
+      <kbd>Double-click</kbd> canvas — add node<br>
+      <kbd>Click</kbd> — select node or arc<br>
+      <kbd>Shift+click</kbd> — connect selected &rarr; target<br>
+      <kbd>Drag</kbd> — move node<br>
+      <kbd>Delete</kbd> / <kbd>Backspace</kbd> — remove selected
+    </div>
+  </div>
+
+  <div>
+    <div class="section-title">Stats</div>
+    <div id="stats" style="font-size:13px;"></div>
+  </div>
+</div>
+
+<div id="canvas-container">
+  <canvas id="canvas"></canvas>
+  <div id="prompt-bar">
+    <div id="prompt-text">Add some nodes and arcs to generate a description...</div>
+    <button id="copy-btn" onclick="copyPrompt()">Copy</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+
+let nodes = [];
+let arcs = [];
+let nextNodeId = 1;
+let nextArcId = 1;
+let selectedElement = null;
+let hoveredElement = null;
+let dragging = null;
+let mouse = { x: 0, y: 0, shift: false };
+
+const NODE_RADIUS = 22;
+const ARC_HIT_DIST = 10;
+const MIDPOINT_RADIUS = 5;
+const CURVE_OFFSET = 45;
+
+const COLORS = {
+  nodeToNode: '#00d4ff',
+  arcInvolved: '#ff6b9d',
+  nodeFill: '#1a3a5a',
+  nodeStroke: '#6ec6ff',
+  midpoint: '#ffa94d',
+  bg: '#0f0f1a',
+  grid: '#1a1a2e',
+  selectGlow: '#ffcc00',
+  text: '#ffffff',
+};
+
+// --- Resize ---
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = container.clientWidth * dpr;
+  canvas.height = container.clientHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  render();
+}
+window.addEventListener('resize', resize);
+
+// --- Geometry ---
+function getEndpointPos(type, id, visited) {
+  if (!visited) visited = new Set();
+  if (type === 'node') {
+    const n = nodes.find(n => n.id === id);
+    return n ? { x: n.x, y: n.y } : { x: 0, y: 0 };
+  }
+  const key = 'arc-' + id;
+  if (visited.has(key)) return { x: container.clientWidth / 2, y: container.clientHeight / 2 };
+  visited.add(key);
+  const arc = arcs.find(a => a.id === id);
+  if (!arc) return { x: 0, y: 0 };
+  const geo = arcGeometry(arc, visited);
+  return { x: geo.mx, y: geo.my };
+}
+
+function arcGeometry(arc, visited) {
+  if (!visited) visited = new Set();
+  const s = getEndpointPos(arc.sourceType, arc.sourceId, new Set(visited));
+  const t = getEndpointPos(arc.targetType, arc.targetId, new Set(visited));
+
+  const dx = t.x - s.x;
+  const dy = t.y - s.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const px = -dy / len;
+  const py = dx / len;
+
+  const cx = (s.x + t.x) / 2 + px * CURVE_OFFSET;
+  const cy = (s.y + t.y) / 2 + py * CURVE_OFFSET;
+
+  // Quadratic bezier midpoint at t=0.5
+  const mx = 0.25 * s.x + 0.5 * cx + 0.25 * t.x;
+  const my = 0.25 * s.y + 0.5 * cy + 0.25 * t.y;
+
+  return { sx: s.x, sy: s.y, cx, cy, tx: t.x, ty: t.y, mx, my };
+}
+
+function isMetaArc(arc) {
+  return arc.sourceType === 'arc' || arc.targetType === 'arc';
+}
+
+function arcColor(arc) {
+  return isMetaArc(arc) ? COLORS.arcInvolved : COLORS.nodeToNode;
+}
+
+// --- Hit testing ---
+function dist(ax, ay, bx, by) {
+  return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2);
+}
+
+function bezierPt(sx, sy, cx, cy, tx, ty, t) {
+  const mt = 1 - t;
+  return {
+    x: mt * mt * sx + 2 * mt * t * cx + t * t * tx,
+    y: mt * mt * sy + 2 * mt * t * cy + t * t * ty,
+  };
+}
+
+function distToBezier(px, py, sx, sy, cx, cy, tx, ty) {
+  let minD = Infinity;
+  for (let t = 0; t <= 1; t += 0.02) {
+    const p = bezierPt(sx, sy, cx, cy, tx, ty, t);
+    const d = dist(px, py, p.x, p.y);
+    if (d < minD) minD = d;
+  }
+  return minD;
+}
+
+function hitTest(x, y) {
+  // Nodes first (drawn on top)
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    if (dist(x, y, nodes[i].x, nodes[i].y) <= NODE_RADIUS + 4) {
+      return { type: 'node', id: nodes[i].id };
+    }
+  }
+  // Arc midpoints
+  for (let i = arcs.length - 1; i >= 0; i--) {
+    const g = arcGeometry(arcs[i]);
+    if (dist(x, y, g.mx, g.my) <= MIDPOINT_RADIUS + 6) {
+      return { type: 'arc', id: arcs[i].id };
+    }
+  }
+  // Arc curves
+  for (let i = arcs.length - 1; i >= 0; i--) {
+    const g = arcGeometry(arcs[i]);
+    if (distToBezier(x, y, g.sx, g.sy, g.cx, g.cy, g.tx, g.ty) <= ARC_HIT_DIST) {
+      return { type: 'arc', id: arcs[i].id };
+    }
+  }
+  return null;
+}
+
+// --- Drawing ---
+function drawGrid() {
+  const w = container.clientWidth, h = container.clientHeight;
+  ctx.strokeStyle = COLORS.grid;
+  ctx.lineWidth = 1;
+  for (let x = 40; x < w; x += 40) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let y = 40; y < h; y += 40) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+}
+
+function drawArrowhead(tx, ty, fromX, fromY, color) {
+  const dx = tx - fromX, dy = ty - fromY;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const size = 10;
+  const bx = tx - ux * size, by = ty - uy * size;
+  const px = -uy * size * 0.45, py = ux * size * 0.45;
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(bx + px, by + py);
+  ctx.lineTo(bx - px, by - py);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawArc(arc) {
+  const g = arcGeometry(arc);
+  const color = arcColor(arc);
+  const isSel = selectedElement && selectedElement.type === 'arc' && selectedElement.id === arc.id;
+  const isHov = hoveredElement && hoveredElement.type === 'arc' && hoveredElement.id === arc.id;
+
+  // Selection glow
+  if (isSel) {
+    ctx.save();
+    ctx.shadowColor = COLORS.selectGlow;
+    ctx.shadowBlur = 15;
+    ctx.strokeStyle = COLORS.selectGlow;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(g.sx, g.sy);
+    ctx.quadraticCurveTo(g.cx, g.cy, g.tx, g.ty);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Curve
+  ctx.strokeStyle = isHov ? '#ffffff' : color;
+  ctx.lineWidth = isSel ? 2.5 : 2;
+  ctx.beginPath();
+  ctx.moveTo(g.sx, g.sy);
+  ctx.quadraticCurveTo(g.cx, g.cy, g.tx, g.ty);
+  ctx.stroke();
+
+  // Arrowhead near target
+  const aBase = bezierPt(g.sx, g.sy, g.cx, g.cy, g.tx, g.ty, 0.84);
+  const aTip = bezierPt(g.sx, g.sy, g.cx, g.cy, g.tx, g.ty, 0.92);
+  drawArrowhead(aTip.x, aTip.y, aBase.x, aBase.y, isHov ? '#ffffff' : color);
+
+  // Midpoint dot
+  ctx.fillStyle = COLORS.midpoint;
+  ctx.beginPath();
+  ctx.arc(g.mx, g.my, MIDPOINT_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  if (isSel || isHov) {
+    ctx.strokeStyle = isSel ? COLORS.selectGlow : '#ffffff88';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+function drawNode(node) {
+  const isSel = selectedElement && selectedElement.type === 'node' && selectedElement.id === node.id;
+  const isHov = hoveredElement && hoveredElement.type === 'node' && hoveredElement.id === node.id;
+
+  if (isSel) {
+    ctx.save();
+    ctx.shadowColor = COLORS.selectGlow;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = COLORS.selectGlow + '33';
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, NODE_RADIUS + 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = isHov ? '#2a4a6a' : COLORS.nodeFill;
+  ctx.beginPath();
+  ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = isSel ? COLORS.selectGlow : (isHov ? '#ffffff' : COLORS.nodeStroke);
+  ctx.lineWidth = isSel ? 2.5 : 2;
+  ctx.stroke();
+
+  ctx.fillStyle = COLORS.text;
+  ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(node.label, node.x, node.y);
+}
+
+function render() {
+  const w = container.clientWidth, h = container.clientHeight;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, w, h);
+  drawGrid();
+
+  arcs.forEach(drawArc);
+  nodes.forEach(drawNode);
+
+  // Connection preview
+  if (selectedElement && mouse.shift) {
+    const pos = getEndpointPos(selectedElement.type, selectedElement.id);
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = '#ffffff44';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(mouse.x, mouse.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  updateStats();
+  updatePrompt();
+}
+
+// --- UI ---
+function updateInfoPanel() {
+  const panel = document.getElementById('info-panel');
+  if (!selectedElement) {
+    panel.innerHTML = '<span class="info-label">Nothing selected</span>';
+    return;
+  }
+  if (selectedElement.type === 'node') {
+    const n = nodes.find(n => n.id === selectedElement.id);
+    if (!n) { panel.innerHTML = '<span class="info-label">Nothing selected</span>'; return; }
+    const out = arcs.filter(a => a.sourceType === 'node' && a.sourceId === n.id).length;
+    const inc = arcs.filter(a => a.targetType === 'node' && a.targetId === n.id).length;
+    panel.innerHTML = `
+      <span class="info-type-node">Node</span> <span class="info-value">${n.label}</span><br>
+      <span class="info-label">ID:</span> <span class="info-value">${n.id}</span><br>
+      <span class="info-label">Outgoing:</span> <span class="info-value">${out}</span>
+      <span class="info-label"> Incoming:</span> <span class="info-value">${inc}</span>`;
+  } else {
+    const a = arcs.find(a => a.id === selectedElement.id);
+    if (!a) { panel.innerHTML = '<span class="info-label">Nothing selected</span>'; return; }
+    const srcLabel = a.sourceType === 'node'
+      ? (nodes.find(n => n.id === a.sourceId)?.label || '?')
+      : `Arc ${a.sourceId}`;
+    const tgtLabel = a.targetType === 'node'
+      ? (nodes.find(n => n.id === a.targetId)?.label || '?')
+      : `Arc ${a.targetId}`;
+    const meta = isMetaArc(a) ? 'Meta-arc (involves arc)' : 'Direct arc (node\u2192node)';
+    panel.innerHTML = `
+      <span class="info-type-arc">Arc</span> <span class="info-value">${a.id}</span><br>
+      <span class="info-label">From:</span> <span class="info-value">${srcLabel}</span><br>
+      <span class="info-label">To:</span> <span class="info-value">${tgtLabel}</span><br>
+      <span class="info-label">${meta}</span>`;
+  }
+}
+
+function updateStats() {
+  const metaCount = arcs.filter(isMetaArc).length;
+  document.getElementById('stats').innerHTML =
+    `<span class="info-label">Nodes:</span> ${nodes.length}&ensp;` +
+    `<span class="info-label">Arcs:</span> ${arcs.length}&ensp;` +
+    `<span class="info-label">Meta:</span> ${metaCount}`;
+}
+
+function updatePrompt() {
+  const el = document.getElementById('prompt-text');
+  if (!nodes.length && !arcs.length) {
+    el.textContent = 'Add some nodes and arcs to generate a description...';
+    return;
+  }
+  const parts = [];
+  parts.push(`The network has ${nodes.length} node${nodes.length !== 1 ? 's' : ''} and ${arcs.length} arc${arcs.length !== 1 ? 's' : ''}.`);
+  if (nodes.length) parts.push(`Nodes: ${nodes.map(n => n.label).join(', ')}.`);
+
+  const direct = arcs.filter(a => !isMetaArc(a));
+  const meta = arcs.filter(isMetaArc);
+
+  if (direct.length) {
+    const descs = direct.map(a => {
+      const s = nodes.find(n => n.id === a.sourceId)?.label || '?';
+      const t = nodes.find(n => n.id === a.targetId)?.label || '?';
+      return `${s} \u2192 ${t}`;
+    });
+    parts.push(`Direct arcs: ${descs.join('; ')}.`);
+  }
+  if (meta.length) {
+    const descs = meta.map(a => {
+      const s = a.sourceType === 'node'
+        ? (nodes.find(n => n.id === a.sourceId)?.label || '?')
+        : `(arc ${a.sourceId})`;
+      const t = a.targetType === 'node'
+        ? (nodes.find(n => n.id === a.targetId)?.label || '?')
+        : `(arc ${a.targetId})`;
+      return `${s} \u2192 ${t}`;
+    });
+    parts.push(`Meta-arcs (arcs connecting to arcs): ${descs.join('; ')}.`);
+  }
+  el.textContent = parts.join('\n');
+}
+
+function copyPrompt() {
+  navigator.clipboard.writeText(document.getElementById('prompt-text').textContent);
+  const btn = document.getElementById('copy-btn');
+  btn.textContent = 'Copied!';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+}
+
+// --- Mutations ---
+function addNode(x, y) {
+  const label = nextNodeId <= 26
+    ? String.fromCharCode(64 + nextNodeId)
+    : 'N' + nextNodeId;
+  nodes.push({ id: nextNodeId, x, y, label });
+  nextNodeId++;
+  render();
+}
+
+function addArc(sType, sId, tType, tId) {
+  if (sType === tType && sId === tId) return;
+  if (arcs.find(a => a.sourceType === sType && a.sourceId === sId && a.targetType === tType && a.targetId === tId)) return;
+  arcs.push({ id: nextArcId, sourceType: sType, sourceId: sId, targetType: tType, targetId: tId });
+  nextArcId++;
+  render();
+}
+
+function cleanOrphanedArcs() {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const arcIds = new Set(arcs.map(a => a.id));
+    const nodeIds = new Set(nodes.map(n => n.id));
+    arcs = arcs.filter(a => {
+      const srcOk = a.sourceType === 'node' ? nodeIds.has(a.sourceId) : arcIds.has(a.sourceId);
+      const tgtOk = a.targetType === 'node' ? nodeIds.has(a.targetId) : arcIds.has(a.targetId);
+      if (!srcOk || !tgtOk) { changed = true; return false; }
+      return true;
+    });
+  }
+}
+
+function deleteElement(el) {
+  if (!el) return;
+  if (el.type === 'node') {
+    arcs = arcs.filter(a => !(
+      (a.sourceType === 'node' && a.sourceId === el.id) ||
+      (a.targetType === 'node' && a.targetId === el.id)
+    ));
+    cleanOrphanedArcs();
+    nodes = nodes.filter(n => n.id !== el.id);
+  } else {
+    arcs = arcs.filter(a => a.id !== el.id);
+    cleanOrphanedArcs();
+  }
+  if (selectedElement && selectedElement.type === el.type && selectedElement.id === el.id) {
+    selectedElement = null;
+  }
+  updateInfoPanel();
+  render();
+}
+
+// --- Events ---
+function canvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+let lastClickTime = 0, lastClickX = 0, lastClickY = 0;
+
+canvas.addEventListener('mousedown', (e) => {
+  const pos = canvasPos(e);
+  const now = Date.now();
+  const hit = hitTest(pos.x, pos.y);
+
+  const dblClick = (now - lastClickTime < 350) && dist(pos.x, pos.y, lastClickX, lastClickY) < 10;
+  lastClickTime = now;
+  lastClickX = pos.x;
+  lastClickY = pos.y;
+
+  if (dblClick && !hit) { addNode(pos.x, pos.y); return; }
+
+  if (e.shiftKey && selectedElement && hit) {
+    addArc(selectedElement.type, selectedElement.id, hit.type, hit.id);
+    return;
+  }
+
+  if (hit) {
+    selectedElement = hit;
+    updateInfoPanel();
+    if (hit.type === 'node') {
+      const n = nodes.find(n => n.id === hit.id);
+      dragging = { id: hit.id, ox: pos.x - n.x, oy: pos.y - n.y };
+    }
+  } else {
+    selectedElement = null;
+    updateInfoPanel();
+  }
+  render();
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const pos = canvasPos(e);
+  mouse.x = pos.x;
+  mouse.y = pos.y;
+  mouse.shift = e.shiftKey;
+
+  if (dragging) {
+    const n = nodes.find(n => n.id === dragging.id);
+    if (n) { n.x = pos.x - dragging.ox; n.y = pos.y - dragging.oy; }
+    render();
+    return;
+  }
+
+  const hit = hitTest(pos.x, pos.y);
+  const prev = hoveredElement;
+  hoveredElement = hit;
+
+  canvas.style.cursor = hit ? (e.shiftKey && selectedElement ? 'crosshair' : 'pointer') : 'default';
+
+  if (hit?.type !== prev?.type || hit?.id !== prev?.id || (selectedElement && e.shiftKey)) {
+    render();
+  }
+});
+
+canvas.addEventListener('mouseup', () => { dragging = null; });
+canvas.addEventListener('mouseleave', () => { hoveredElement = null; dragging = null; mouse.shift = false; render(); });
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Shift') { mouse.shift = true; render(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    deleteElement(selectedElement);
+  }
+});
+document.addEventListener('keyup', (e) => { if (e.key === 'Shift') { mouse.shift = false; render(); } });
+
+// --- Buttons ---
+document.getElementById('add-node-btn').addEventListener('click', () => {
+  const w = container.clientWidth, h = container.clientHeight;
+  addNode(100 + Math.random() * (w - 300), 80 + Math.random() * (h - 200));
+});
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  nodes = []; arcs = []; nextNodeId = 1; nextArcId = 1;
+  selectedElement = null; hoveredElement = null;
+  updateInfoPanel(); render();
+});
+
+// --- Demo ---
+function initDemo() {
+  const cx = container.clientWidth / 2;
+  const cy = (container.clientHeight - 60) / 2;
+
+  nodes.push({ id: 1, x: cx - 180, y: cy - 80, label: 'A' });
+  nodes.push({ id: 2, x: cx + 180, y: cy - 80, label: 'B' });
+  nodes.push({ id: 3, x: cx, y: cy + 120, label: 'C' });
+  nextNodeId = 4;
+
+  arcs.push({ id: 1, sourceType: 'node', sourceId: 1, targetType: 'node', targetId: 2 });
+  arcs.push({ id: 2, sourceType: 'node', sourceId: 2, targetType: 'node', targetId: 3 });
+  arcs.push({ id: 3, sourceType: 'node', sourceId: 3, targetType: 'arc', targetId: 1 });
+  nextArcId = 4;
+}
+
+resize();
+initDemo();
+render();
+</script>
+</body>
+</html>
